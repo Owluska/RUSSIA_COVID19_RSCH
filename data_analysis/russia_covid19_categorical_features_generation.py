@@ -18,6 +18,21 @@ def score_dataset(X_train, X_valid, Y_train, Y_valid):
     out = model.predict(X_valid) 
     return mean_absolute_error(Y_valid, out)
 
+
+
+path_cases = 'covid19-russia-regions-cases/covid19-russia-cases.csv'
+cases = pd.read_csv(path_cases)
+cases['Date']=pd.to_datetime(cases['Date'], errors='coerce')
+goal = 'Day-Confirmed'
+
+
+
+
+path_steps='other_data/chronology.xlsx'
+gov_steps=pd.read_excel(path_steps)
+gov_steps.drop(['Descriprion'], axis=1)
+gov_steps['Date']=pd.to_datetime(gov_steps['Date'], errors='coerce')
+merge=cases.merge(gov_steps, how='inner', on='Date')
 #dates=dates.dt.date
 #dates=pd.to_datetime(gov_steps['Date'],errors='coerce').dt.date.copy()
 # steps=pd.DataFrame({'steps': 0 for i in cases.index}, index=cases.index)
@@ -32,22 +47,13 @@ def score_dataset(X_train, X_valid, Y_train, Y_valid):
 #             break
         
 
-path_cases = 'covid19-russia-regions-cases/covid19-russia-cases.csv'
-cases = pd.read_csv(path_cases)
-cases['Date']=pd.to_datetime(cases['Date'], errors='coerce')
-goal = 'Day-Confirmed'
-
-
-
-path_steps='other_data/chronology.xlsx'
-gov_steps=pd.read_excel(path_steps)
-gov_steps.drop(['Descriprion'], axis=1)
-gov_steps['Date']=pd.to_datetime(gov_steps['Date'], errors='coerce')
-merge=cases.merge(gov_steps, how='inner', on='Date')
-
-
 path_isolation='other_data/isolation.xlsx'
 isolation=pd.read_excel(path_isolation)
+
+
+# isolation_moscow=pd.DataFrame([isolation.loc[i] for i in isolation.index 
+#                                  if isolation['Country'][i] == 'Россия'
+#                                   and isolation['City'][i] == 'Москва'])
 
 isolation_russia=pd.DataFrame([isolation.loc[i] for i in isolation.index 
                                  if isolation['Country'][i] == 'Россия'])
