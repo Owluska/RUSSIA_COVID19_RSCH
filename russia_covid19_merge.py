@@ -18,65 +18,107 @@ def score_dataset(X_train, X_valid, Y_train, Y_valid):
     out = model.predict(X_valid) 
     return mean_absolute_error(Y_valid, out)
 
-#dates=dates.dt.date
-#dates=pd.to_datetime(gov_steps['Date'],errors='coerce').dt.date.copy()
-# steps=pd.DataFrame({'steps': 0 for i in cases.index}, index=cases.index)
-# step = 1
-# for c in cases['Date'].index:
-#       steps['steps'][c] = step
-#       for d in dates.index:
-#         if cases['Date'][c]==str(dates[d]):
-#             #print("{}\t{}".format(cases['Date'][c], dates[d]))
-#             dates[d]=pd.to_datetime('01-01-1987').date
-#             step=step+1
-#             break
         
-def load(path, to_drop=[]):
+def choose_category_value(df, cat, value):
+    return df[df[cat] == value]
+
+def load(path, cats=[], cat_values=[], to_drop=[]):
     df = pd.read_excel(path)
-    df['Date']=pd.to_datetime(df['Date'], errors='coerce')
+    df['Date']=pd.to_datetime(df['Date'], dayfirst=True,errors='coerce')
+    if cats!=[] and cat_values!=[]:
+      for c, cv in zip(cats, cat_values):
+        df=choose_category_value(df, c, cv)
     if to_drop != []:
         df.drop(to_drop, axis=1, inplace=True)
+    df.dropna(axis=0, how='any', inplace=True)
     return df
     
-path_cases = 'other_data/covid19-russia-cases.xlsx'
-path_steps='other_data/chronology.xlsx'
-path_isolation='other_data/isolation.xlsx'
+def get_raws(df, col, value):
+   i = df.columns.get_loc(col)
+   raws=[raw[1:] for raw in df.itertuples() if raw[i+1] == value] 
+   raws = pd.DataFrame(raws, columns=df.columns)    
+   return raws
 
-sets=[]
-paths=[path_cases, path_steps, path_isolation]
-for p in paths:
-    if p == path_cases:
-        drops=['Region/City', 'Region/City-Eng']
-    if p == path_steps:
-        drops =['Descriprion']
-    if p == path_isolation:
-        drops=['Country']
-    sets.append(load(p, to_drop=drops))
-    
-# cases = pd.read_excel(path_cases)
-# cases['Date']=pd.to_datetime(cases['Date'], errors='coerce')
+def merge_dfs(dfs, suffs, how='left', on='Date'):
+  ln=len(dfs)
+  mgd=pd.DataFrame(dfs[0])
+  index=mgd.index
+  for i in range(ln):  
+    if(i > ln-2):
+      break
+    mgd=pd.merge(mgd, dfs[i+1], suffixes=[suffs[i], suffs[i+1]], how='left', on='Date').set_index(index)
+  return mgd
 
-merged=sets[0].merge(sets[1], how='inner', on='Date').merge(sets[2], how='inner', on='Date')
+def transform_df(df, col):
+  uniq=pd.unique(df[col])
+  dfs=[get_raws(df, col, u) for u in uniq]
 
-merged.to_excel('other_data/merged.xlsx', sheet_name='merged')
+  sffxs=['_'+str(u) for u in uniq]
+  df = merge_dfs(dfs, sffxs)
+  return df
+
+def drop_missed_in_raws(df):
+
+  print("Got df with shape {}".format(df.shape))
+  missed = [label for label, raw in df.iterrows() if raw.isnull().any()]
+  if missed !=[]:  
+    print("Found missed values in {} raws".format(len(missed)))
+    df.drop(missed, axis=0, inplace=True)
+  else:
+    print("Raws with missed values didn't found")    
+  print("Returning df with shape: {}".format(df.shape))
+  return df
+
+def drop_missed_in_cols(df):
+
+  print("Got df with shape {}".format(df.shape))
+  missed = [col for col in mrgd if mrgd[col].isnull().any()]
+  if missed !=[]:  
+    print("Found missed values in {} cols".format(len(missed)))
+    df.drop(missed, axis=0, inplace=True)
+  else:
+    print("Cols with missed values didn't found")    
+  print("Returning df with shape: {}".format(df.shape))
+  return df  
 
 
-# path_steps='other_data/chronology.xlsx'
-# gov_steps=pd.read_excel(path_steps)
-# gov_steps.drop(['Descriprion'], axis=1)
-# gov_steps['Date']=pd.to_datetime(gov_steps['Date'], errors='coerce')
-# merge=cases.merge(gov_steps, how='inner', on='Date')
 
 
-# path_isolation='other_data/isolation.xlsx'
-# isolation=pd.read_excel(path_isolation)
+#path_gd = '/content/drive/My Drive/CVD19_RUS_DS/'    
+folder = 'data_xl/'    
+path_cases = 'covid19-russia-cases.xlsx'
+path_steps='chronology.xlsx'
+path_isolation='isolation.xlsx'
 
-# isolation_russia=pd.DataFrame([isolation.loc[i] for i in isolation.index 
-#                                  if isolation['Country'][i] == 'Россия'])
-# isolation_russia.drop(['Country'], axis=1, inplace=True)
-# isolation_russia['Date']=pd.to_datetime(isolation_russia['Date'], errors='coerce')
-# #isolation_russia.index=isolation_russia['Date']
+path_cases=folder+path_cases
+path_steps=folder+path_steps
+path_isol=folder+path_isolation
 
-# merge=cases.merge(isolation_russia, how='inner', on='Date')
-# drop_list=['Region/City', 'Region/City-Eng']
-# merge.drop(drop_list, axis=1, inplace=True)
+print("Paths to data:\r\nCases: {}\r\nSteps: {}\r\nIsolation: {}".format(path_cases,
+                                            path_steps, path_isol))
+
+cases=load(path_cases, cats=['Region/City'], cat_values=['Москва'],
+                        to_drop=['Region/City', 'Region/City-Eng',
+                                   'Day-Deaths', 'Day-Recovered'])
+steps=load(path_steps, to_drop=['Descriprion'])
+isol=load(path_isol, cats=['Country','City'],
+              cat_values=['Россия','Москва'],
+                  to_drop=['Country','City'])
+
+
+
+
+mrgd=transform_df(cases, 'Region_ID')
+# TODO create index for merged
+print(mrgd.head())
+
+mrgd=drop_missed_in_cols(mrgd)
+
+index = mrgd.index
+mrgd=pd.merge(mrgd, steps, how='left', on='Date').set_index(index)
+print(mrgd.head())
+
+mrgd=drop_missed_in_raws(mrgd)
+index = mrgd.index
+mrgd=pd.merge(mrgd, isol, how='left', on='Date').set_index(index)
+print(mrgd.head())
